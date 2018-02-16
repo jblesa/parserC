@@ -1,3 +1,14 @@
+/*
+ * parserTSIP.c
+ *
+ *  Created on: 15/02/2018
+ *      Author: Javier Blesa  <javierblesam@gmail.com>
+ *
+ */
+/**
+ * @file parserTSIP.c
+ */
+
 #include "parserTSIP.h"
 
 
@@ -39,9 +50,7 @@ uint8_t parserTSIP ();
 int main () {
 	int status;
 
-
 	while(1) {
-
 
 		parserTSIP ();
 	}
@@ -69,8 +78,7 @@ uint8_t parserTSIP () {
 	//TEST
 	uint8_t dataCounter = 0;
 
-	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {
-	}
+	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
 
 	while (checkByte != DLE) {
 		readed = uavnComRead(&checkByte, dataCounter++);
@@ -78,12 +86,10 @@ uint8_t parserTSIP () {
 
 	// Detect the ETX
 
-	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {
-	}
+	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
 	commandBuffer = (uint8_t *) malloc(1);
 
 	while (!endPacket) {
-
 
 		if (checkByte == DLE) {
 			while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
@@ -145,6 +151,7 @@ uint8_t parserTSIP () {
 		}
 	}
 
+	free(commandBuffer);
 	return status;
 
 }
