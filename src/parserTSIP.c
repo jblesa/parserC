@@ -46,6 +46,12 @@ uint32_t crc32(const uint8_t * const buffer, const uint32_t start, const uint32_
  * return PACKET_OK when a successful packet is received, or error in the other cases
  */
 uint8_t parserTSIP ();
+/**
+ * \brief Resize with realloc the RX buffer.
+ * \param buffer Pointer to buffer containing data to process
+ * \param change Change of the buffer size.
+ */
+uint8_t updateBufferSize (uint8_t *buffer, int8_t change);
 
 int main () {
 	int status;
@@ -66,7 +72,6 @@ uint8_t parserTSIP () {
 	int32_t readed;
 	uint8_t checkByte;
 	uint8_t *commandBuffer;
-	uint8_t *tmpBuffer;
 	uint8_t commandSize = 0;
 	uint32_t crc32Calculated;
 
@@ -95,18 +100,16 @@ uint8_t parserTSIP () {
 			while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
 			if (checkByte == DLE) {
 				commandBuffer[commandSize++] = checkByte;
-				tmpBuffer = (uint8_t *) realloc(commandBuffer, sizeof(commandBuffer)+1);
-				if (!tmpBuffer) {
+				if (updateBufferSize (commandBuffer, 1) == 0) {
 					status = OUT_OF_MEMORY;
 				}
-				commandBuffer = tmpBuffer;
+
+
 			}
 			else if (checkByte == ETX) {
-				tmpBuffer = (uint8_t *) realloc(commandBuffer, sizeof(commandBuffer)-1); //Remove last empty
-				if (!tmpBuffer) {
+				if (updateBufferSize (commandBuffer, 1) == 0) {
 					status = OUT_OF_MEMORY;
 				}
-				commandBuffer = tmpBuffer;
 				endPacket = 1;
 			}
 			else {
@@ -116,11 +119,9 @@ uint8_t parserTSIP () {
 		}
 		else {
 			commandBuffer[commandSize++] = checkByte;
-			tmpBuffer = (uint8_t *) realloc(commandBuffer, sizeof(commandBuffer)+1);
-			if (!tmpBuffer) {
+			if (updateBufferSize (commandBuffer, 1) == 0) {
 				status = OUT_OF_MEMORY;
 			}
-			commandBuffer = tmpBuffer;
 
 		}
 
@@ -140,7 +141,9 @@ uint8_t parserTSIP () {
 		if (crc32Calculated != ucrc32Received.crc32) { //TODO-change to equal
 
 			////CRC extraction
-			commandBuffer = (uint8_t *) realloc(commandBuffer, sizeof(commandBuffer)-CRCSIZE); //Remove CRC
+			if (updateBufferSize (commandBuffer, -4) == 0) {
+				status = OUT_OF_MEMORY;
+			}
 			ProcessValidData(commandBuffer, commandSize - CRCSIZE);
 
 			status = PACKET_OK;
@@ -156,6 +159,20 @@ uint8_t parserTSIP () {
 
 }
 
+uint8_t updateBufferSize (uint8_t *buffer, int8_t change) {
+	uint8_t *tmpBuffer;
+	uint8_t val;
+
+	tmpBuffer = (uint8_t *) realloc(buffer, sizeof(buffer) + change);
+	if (!tmpBuffer) {
+		val = 0;
+	}
+	else {
+		buffer = tmpBuffer;
+		val = 1;
+	}
+	return val;
+}
 
 int32_t uavnComRead(uint8_t * const buffer, const uint32_t count){
 
