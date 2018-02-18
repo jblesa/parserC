@@ -1,12 +1,13 @@
 /*
- * parserTSIP.c
+ * parserTSIPlimBuffer.c
  *
  *  Created on: 17 feb. 2018
  *      Author: jblesa
  */
 
 
-#include "parserTSIP.h"
+#include "parserTSIPlimBuffer.h"
+
 
 
 /**
@@ -39,16 +40,12 @@ void ProcessValidData(const uint8_t * const buffer, const int32_t numberOfBytes)
  */
 uint32_t crc32(const uint8_t * const buffer, const uint32_t start, const uint32_t end);
 /**
- * \brief Parse received TSIP packets optimizing the used memory
- * return PACKET_OK when a successful packet is received, or error in the other cases
- */
-uint8_t parserTSIP ();
-/**
  * \brief Resize with realloc the RX buffer.
  * \param buffer Pointer to buffer containing data to process
  * \param change Change of the buffer size.
  */
-uint8_t updateBufferSize (uint8_t *buffer, int8_t change);
+uint8_t parserTSIP ();
+
 
 
 
@@ -86,8 +83,14 @@ uint8_t parserTSIP () {
 	static uint8_t dataCounter;
 
 
+	if (commandSize >= MAX_BUF_SIZE) {
+		status = OUT_OF_MEMORY;
+		machineState = WAIT_FOR_START;
+		commandSize = 0;
+	}
+
 	status = PACKET_OK;
-	while ((readed = uavnComRead(&checkByte, 1)) == 0) {} //Read 1 byte
+	while ((readed = uavnComRead(&checkByte, 1)) == 0) {} //Read 1
 
 	switch (machineState) {
 	case WAIT_FOR_START:
@@ -138,13 +141,7 @@ uint8_t parserTSIP () {
 	}
 	else {
 		machineState = WAIT_FOR_END_MSG;
-		//First time we save a data
-		commandBuffer = (uint8_t *) malloc (1);
-		if(commandBuffer == NULL) {
-			status = OUT_OF_MEMORY;
-		}
 		commandBuffer[commandSize++] = checkByte;
-
 	}
 	break;
 
@@ -183,10 +180,6 @@ uint8_t parserTSIP () {
 
 		}
 		else {
-
-			if (updateBufferSize (commandBuffer, 1) == 0) {
-				status = OUT_OF_MEMORY;
-			}
 			commandBuffer[commandSize++] = checkByte;
 			bEvenDLE = 0;
 		}
@@ -200,24 +193,7 @@ uint8_t parserTSIP () {
 	return status;
 }
 
-
-uint8_t updateBufferSize (uint8_t *buffer, int8_t change) {
-	uint8_t *tmpBuffer;
-	uint8_t val;
-
-	tmpBuffer = (uint8_t *) realloc(buffer, sizeof(buffer) + change);
-	if (!tmpBuffer) {
-		val = 0;
-	}
-	else {
-		buffer = tmpBuffer;
-		val = 1;
-	}
-	return val;
-}
-
 //For testing
-
 int32_t uavnComRead(uint8_t * const buffer, const uint32_t count){
 
 	memcpy (buffer, datab+count, 1);
