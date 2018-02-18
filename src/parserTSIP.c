@@ -165,15 +165,13 @@ uint8_t parserTSIP () {
 
 			// Check CRC32
 			crc32Calculated = crc32(commandBuffer, 0, commandSize - CRCSIZE -1); //Last DLE continues there
-			if (crc32Calculated == ucrc32Received.crc32) { //TODO-change to equal
+			if (crc32Calculated == ucrc32Received.crc32) {
 
-				tmpBuffer = (uint8_t *) malloc(commandSize - CRCSIZE -1);
-				if (!tmpBuffer) {
-
+				if (updateBufferSize (commandBuffer, -5) == 0) {
+					status = OUT_OF_MEMORY;
 				}
-				memcpy(tmpBuffer, commandBuffer, commandSize -CRCSIZE -1);
-				ProcessValidData(tmpBuffer, commandSize - CRCSIZE -1);
-				free(tmpBuffer);
+				ProcessValidData(commandBuffer, commandSize - CRCSIZE -1);
+				free(commandBuffer);
 
 			}
 
