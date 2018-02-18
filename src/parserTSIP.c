@@ -1,13 +1,10 @@
 /*
  * parserTSIP.c
  *
- *  Created on: 15/02/2018
- *      Author: Javier Blesa  <javierblesam@gmail.com>
- *
+ *  Created on: 17 feb. 2018
+ *      Author: jblesa
  */
-/**
- * @file parserTSIP.c
- */
+
 
 #include "parserTSIP.h"
 
@@ -53,111 +50,156 @@ uint8_t parserTSIP ();
  */
 uint8_t updateBufferSize (uint8_t *buffer, int8_t change);
 
-int main () {
-	int status;
 
-	while(1) {
 
-		parserTSIP ();
+int main() {
+
+	uint8_t error = 0;
+
+	while (!error) {
+
+		if ((error = parserTSIP()) != PACKET_OK) {
+
+			//printf("Error: %d\n", error);
+
+		}
+
 	}
-
-	return status;
-
+	return error;
 }
-
 
 // Detect the first DLE
 uint8_t parserTSIP () {
 
 	int32_t readed;
 	uint8_t checkByte;
-	uint8_t *commandBuffer;
-	uint8_t commandSize = 0;
+	static uint8_t commandSize;
 	uint32_t crc32Calculated;
-
-	uint8_t status;
+	uint8_t * tmpBuffer;
 	uint8_t i;
-	uint8_t endPacket = 0;
 
+	static uint8_t machineState;
+	static int bEvenDLE;
+	uint8_t status;
 
 	//TEST
-	uint8_t dataCounter = 0;
+	static uint8_t dataCounter;
 
-	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
 
-	while (checkByte != DLE) {
-		readed = uavnComRead(&checkByte, dataCounter++);
-	}
+	status = PACKET_OK;
+	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {} //Read 1
 
-	// Detect the ETX
-
-	while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
-	commandBuffer = (uint8_t *) malloc(1);
-
-	while (!endPacket) {
-
+	switch (machineState) {
+	case WAIT_FOR_START:
 		if (checkByte == DLE) {
-			while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
-			if (checkByte == DLE) {
-				commandBuffer[commandSize++] = checkByte;
-				if (updateBufferSize (commandBuffer, 1) == 0) {
-					status = OUT_OF_MEMORY;
-				}
+			commandSize = 0;
+			machineState = WAIT_FOR_ID;
+		}
+		else if (checkByte != ETX) {
+			machineState = WAIT_FOR_DLE_ETX;
+			commandSize = 0;
+		}
+		bEvenDLE = 0;
+		break;
 
+	case WAIT_FOR_DLE_ETX:
+		if (checkByte == DLE)
+			machineState = WAIT_FOR_ETX;
+		else
+			machineState = WAIT_FOR_START;
+		break;
 
-			}
-			else if (checkByte == ETX) {
-				if (updateBufferSize (commandBuffer, 1) == 0) {
-					status = OUT_OF_MEMORY;
-				}
-				endPacket = 1;
-			}
-			else {
-				endPacket = 1;
-				status = PACKET_FORMAT_ERROR;
-			}
+	case WAIT_FOR_ETX:
+	if (checkByte == ETX) {
+		// found end of a message
+		machineState = WAIT_FOR_DLE;
+	}
+	else {
+		machineState = WAIT_FOR_START;
+	}
+	break;
+
+	case WAIT_FOR_DLE:
+		if (checkByte == DLE) {
+			commandSize = 0;
+			//commandBuffer[commandSize++] = checkByte;
+			machineState = WAIT_FOR_ID;
 		}
 		else {
-			commandBuffer[commandSize++] = checkByte;
+			machineState = WAIT_FOR_START;
+		}
+		bEvenDLE = 0;
+		break;
+
+	case WAIT_FOR_ID:
+	if (checkByte == DLE || checkByte == ETX) {
+		machineState = WAIT_FOR_START;
+		commandSize = 0;
+	}
+	else {
+		machineState = WAIT_FOR_END_MSG;
+		//First time we save a data
+		commandBuffer = (uint8_t *) malloc (1);
+		if(commandBuffer == NULL) {
+			status = OUT_OF_MEMORY;
+		}
+		commandBuffer[commandSize++] = checkByte;
+
+	}
+	break;
+
+	case WAIT_FOR_END_MSG:
+		if (checkByte == DLE && commandBuffer[commandSize-1] == DLE && !bEvenDLE) {
+			// byte stuffing
+			bEvenDLE = 1;
+		}
+		else if (checkByte == ETX && commandBuffer[commandSize-1] == DLE && !bEvenDLE) {
+			// complete message received, in buffer
+			machineState = WAIT_FOR_DLE;
+
+
+			// Extract CRC32
+			for (i=0; i < CRCSIZE; i++){
+				ucrc32Received.byte[i] = commandBuffer[commandSize - CRCSIZE - 1 + i];
+			}
+
+			// Check CRC32
+			crc32Calculated = crc32(commandBuffer, 0, commandSize - CRCSIZE -1); //Last DLE continues there
+			if (crc32Calculated == ucrc32Received.crc32) { //TODO-change to equal
+
+				tmpBuffer = (uint8_t *) malloc(commandSize - CRCSIZE -1);
+				if (!tmpBuffer) {
+
+				}
+				memcpy(tmpBuffer, commandBuffer, commandSize -CRCSIZE -1);
+				ProcessValidData(tmpBuffer, commandSize - CRCSIZE -1);
+				free(tmpBuffer);
+
+			}
+
+			else {
+				status = PACKET_CRC_ERROR;
+			}
+
+		}
+		else {
+
 			if (updateBufferSize (commandBuffer, 1) == 0) {
 				status = OUT_OF_MEMORY;
 			}
-
+			commandBuffer[commandSize++] = checkByte;
+			bEvenDLE = 0;
 		}
+		break;
 
-		while ((readed = uavnComRead(&checkByte, dataCounter++)) == 0) {}
+	default:
+		machineState = WAIT_FOR_START;
+		break;
 	}
 
-	if (status == PACKET_OK) {
-
-		// Extract CRC32
-		for (i=0; i < CRCSIZE; i++){
-			ucrc32Received.byte[i] = commandBuffer[commandSize - CRCSIZE + i];
-		}
-
-		// Check CRC32
-		crc32Calculated = crc32(commandBuffer, 0, commandSize - CRCSIZE);
-
-		if (crc32Calculated != ucrc32Received.crc32) { //TODO-change to equal
-
-			////CRC extraction
-			if (updateBufferSize (commandBuffer, -4) == 0) {
-				status = OUT_OF_MEMORY;
-			}
-			ProcessValidData(commandBuffer, commandSize - CRCSIZE);
-
-			status = PACKET_OK;
-		}
-
-		else {
-			status = PACKET_CRC_ERROR;
-		}
-	}
-
-	free(commandBuffer);
 	return status;
-
 }
+
 
 uint8_t updateBufferSize (uint8_t *buffer, int8_t change) {
 	uint8_t *tmpBuffer;
@@ -174,29 +216,21 @@ uint8_t updateBufferSize (uint8_t *buffer, int8_t change) {
 	return val;
 }
 
+//For testing
 int32_t uavnComRead(uint8_t * const buffer, const uint32_t count){
 
-
-	memcpy (buffer, data+count, 1);
-
-
+	memcpy (buffer, datab+count, 1);
 	return 1;
 
 }
 
 uint32_t crc32(const uint8_t * const buffer, const uint32_t start, const uint32_t end){
-	int32_t readed = 0;
 
+	int32_t readed = 0;
 	return readed;
 
 }
 
-
 void ProcessValidData(const uint8_t * const buffer, const int32_t numberOfBytes) {
 
-
 }
-
-
-
-

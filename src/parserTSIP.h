@@ -1,22 +1,5 @@
-/*
- * parserTSIP.h
- *
- *  Created on: 15/02/2018
- *      Author: Javier Blesa  <javierblesam@gmail.com>
- *
- */
-/**
- * @file parserTSIP.h
- */
-
-
-#ifndef PARSERTSIP_H
-#define PARSERTSIP_H
-
-
-/**
- * Includes
- */
+#ifndef PARSERTSIP_H_
+#define PARSERTSIP_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +14,9 @@
 #define ETX 0x03
 
 #define CRCSIZE 4
+
+#define MAX_BUF_SIZE 85
+
 /**
  * Variables
  */
@@ -47,7 +33,22 @@ enum packetstauts {
 	OUT_OF_MEMORY
 };
 
+enum {
+	WAIT_FOR_START,
+	WAIT_FOR_DLE_ETX,	// we have received a char that was not DLE or ETX
+	WAIT_FOR_ETX,		// we have received char+DLE, waiting for ETX
+	WAIT_FOR_DLE,	// we have received char+DLE+ETX, waiting for DLE or else exit
+	WAIT_FOR_ID,
+	WAIT_FOR_END_MSG,
+	SEND_HDR,
+	SEND_MSG,
+	SEND_ETX
+};
+
+uint8_t *commandBuffer;
+
 
 uint8_t data[16] = { DLE, 0x01, 0x01, 0x04, 0x03, 0x10, 0x10, 0x04, 0x45, 0x46, 0x47, 0x48, 0x49, 0x50, DLE, ETX};
+uint8_t datab[20] = { DLE, DLE, DLE, ETX, DLE, 0x01, 0x01, 0x04, 0x03, 0x10, 0x10, 0x04, 0x45, 0x46, 0x47, 0x48, 0x49, 0x50, DLE, ETX};
 
-#endif
+#endif /* PARSERTSIP_H_ */
